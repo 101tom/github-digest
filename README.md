@@ -80,10 +80,23 @@ git push -u origin main
 
 开启后（`config.json` 里 `llm.enabled = true`），每个项目会直接附上 **🇨🇳 中文简介**（它是什么、解决什么问题）和 **💡 点评**（亮点、适合谁用），无需点开链接就能看懂。若模型不可用则自动回退到英文官方简介。
 
-- 走 **GitHub Models**，用 Actions 自带的 `GITHUB_TOKEN` 调用，**无需额外密钥**。
-- 需要 workflow 里的 `models: read` 权限（已配好）。
-- 若调用失败（如额度受限），会自动跳过点评、照常推送，不影响主流程。
-- 想用自己的模型？设置仓库 Secret `LLM_API_KEY`，并改 `llm.endpoint` / `llm.model` 为任意 OpenAI 兼容接口即可（此时 `LLM_API_KEY` 优先）。
+默认走 **DeepSeek**（OpenAI 兼容接口，中文好、便宜）。需要：
+
+1. 去 https://platform.deepseek.com/ 注册 → 创建 API Key
+2. 在仓库 **Secrets** 里新增 `LLM_API_KEY`，填入该 Key
+
+想换别家（OpenAI / 硅基流动 / Moonshot / 通义 等）只改 `config.json`：
+
+```json
+"llm": {
+  "enabled": true,
+  "base_url": "https://api.openai.com/v1",   // 或任何 OpenAI 兼容 base_url
+  "model": "gpt-4o-mini",
+  "api_key_env": "LLM_API_KEY"
+}
+```
+
+> 进阶：若把 `base_url` 留空，会回退到用 `GITHUB_TOKEN` 调 GitHub Models（`models: read` 权限已配好），无需额外密钥——但该接口在部分环境下不可用。
 
 
 ## 本地演练（不推送、不改状态）

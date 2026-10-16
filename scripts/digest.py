@@ -100,7 +100,14 @@ def http_post_json(url, payload, token=None, extra_headers=None, retries=2, time
         try:
             req = urllib.request.Request(url, data=body, headers=headers, method="POST")
             with urllib.request.urlopen(req, timeout=timeout) as resp:
-                return json.loads(resp.read().decode("utf-8", "replace"))
+                status = resp.status
+                raw = resp.read().decode("utf-8", "replace")
+            try:
+                return json.loads(raw)
+            except json.JSONDecodeError as e:
+                raise RuntimeError(
+                    f"响应非 JSON（HTTP {status}，前 200 字符）: {raw[:200]!r}"
+                ) from e
         except urllib.error.HTTPError as e:
             last_err = e
             detail = ""
@@ -305,22 +312,35 @@ def _parse_two_lines(text):
     return summary, comment
 
 
+def _resolve_llm(cfg):
+    """解析 (endpoint, token, is_openai_compatible)。
+
+    - 配了 llm.base_url → 走任意 OpenAI 兼容接口（推荐，如 DeepSeek）。
+    - 否则回退到 GitHub Models（用 GITHUB_TOKEN）。
+    """
+    llm = cfg.get("llm") or {}
+    base_url = (llm.get("base_url") or "").strip()
+    if base_url:
+        key_env = llm.get("api_key_env") or "LLM_API_KEY"
+        token = os.environ.get(key_env, "").strip()
+        return base_url.rstrip("/") + "/chat/completions", token, True
+    token = (os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN") or "").strip()
+    endpoint = llm.get("endpoint", "https://models.github.ai/inference/chat/completions")
+    return endpoint, token, False
+
+
 def llm_enrich(repo, cfg):
     """生成 {summary, comment}：中文简介 + 一句点评。失败返回 {}，静默降级。"""
     llm = cfg.get("llm") or {}
     if not llm.get("enabled"):
         return {}
-    token = (
-        os.environ.get("LLM_API_KEY")
-        or os.environ.get("GITHUB_TOKEN")
-        or os.environ.get("GH_TOKEN")
-    )
+
+    endpoint, token, is_oai = _resolve_llm(cfg)
     if not token:
-        log("未找到可用于点评的令牌，跳过")
+        log("未配置可用的 LLM 密钥，跳过中文简介/点评")
         return {}
 
-    endpoint = llm.get("endpoint", "https://models.github.ai/inference/chat/completions")
-    model = llm.get("model", "openai/gpt-4o-mini")
+    model = llm.get("model") or ("deepseek-chat" if is_oai else "openai/gpt-4o-mini")
     prompt = (
         f"开源项目：{repo['full_name']}\n"
         f"官方简介：{repo['desc']}\n"
@@ -342,17 +362,17 @@ def llm_enrich(repo, cfg):
         "temperature": 0.5,
         "max_tokens": 300,
     }
+    headers = (
+        {"Accept": "application/json"}
+        if is_oai
+        else {
+            "Accept": "application/vnd.github+json",
+            "X-GitHub-Api-Version": "2022-11-28",
+        }
+    )
 
     try:
-        data = http_post_json(
-            endpoint,
-            payload,
-            token=token,
-            extra_headers={
-                "Accept": "application/vnd.github+json",
-                "X-GitHub-Api-Version": "2022-11-28",
-            },
-        )
+        data = http_post_json(endpoint, payload, token=token, extra_headers=headers)
         content = data["choices"][0]["message"]["content"]
     except Exception as e:  # noqa: BLE001
         log(f"中文简介/点评生成失败 {repo['full_name']}: {e}")

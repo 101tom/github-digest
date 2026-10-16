@@ -9,7 +9,9 @@
   "resend_cooldown_days": 90,
   "llm": {
     "enabled": true,
-    "model": "openai/gpt-4o-mini",
+    "base_url": "https://api.deepseek.com/v1",
+    "model": "deepseek-chat",
+    "api_key_env": "LLM_API_KEY",
     "endpoint": "https://models.github.ai/inference/chat/completions"
   },
   "search_queries": [
