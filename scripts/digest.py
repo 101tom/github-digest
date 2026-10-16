@@ -283,6 +283,28 @@ def _parse_json_lenient(text):
     return None
 
 
+def _parse_two_lines(text):
+    """解析模型输出，返回 (summary, comment)。"""
+    text = (text or "").strip()
+    obj = _parse_json_lenient(text)
+    if obj:
+        return str(obj.get("summary", "")).strip(), str(obj.get("comment", "")).strip()
+
+    summary = comment = ""
+    for raw in text.splitlines():
+        line = raw.strip().lstrip("-*#• ").strip()
+        line = re.sub(r"^\*\*(简介|点评)\*\*\s*[:：]?\s*", "", line)
+        if re.match(r"^(简介|是什么|介绍)\s*[:：]", line):
+            summary = re.sub(r"^(简介|是什么|介绍)\s*[:：]\s*", "", line)
+        elif re.match(r"^(点评|一句话点评|推荐)\s*[:：]", line):
+            comment = re.sub(r"^(点评|一句话点评|推荐)\s*[:：]\s*", "", line)
+        elif line.startswith("💡"):
+            comment = line.lstrip("💡 ").strip()
+    if not summary and not comment:
+        summary = text.replace("\n", " ").strip()
+    return summary, comment
+
+
 def llm_enrich(repo, cfg):
     """生成 {summary, comment}：中文简介 + 一句点评。失败返回 {}，静默降级。"""
     llm = cfg.get("llm") or {}
@@ -304,29 +326,24 @@ def llm_enrich(repo, cfg):
         f"官方简介：{repo['desc']}\n"
         f"主要语言：{repo['lang'] or '未知'}；星标数：{repo['stars']}\n"
         f"标签：{', '.join(repo['topics'][:8]) or '无'}\n\n"
-        "请只输出一个 JSON 对象，不要任何多余文字，格式为：\n"
-        '{"summary": "…", "comment": "…"}\n'
-        "summary：用一句中文（不超过 50 字）说明这个项目是什么、主要解决什么问题，"
-        "让没听过的人也知道它干嘛用；专有名词可保留英文。\n"
-        "comment：用一句中文（不超过 35 字）点评它的亮点、适合什么人用，像向朋友安利。"
+        "请严格按下面两行格式输出，不要输出任何其他文字、不要用 Markdown：\n"
+        "简介：<一句中文，不超过 50 字，说清它是什么、解决什么问题，专有名词可留英文>\n"
+        "点评：<一句中文，不超过 35 字，说清亮点和适合谁用，像向朋友安利>\n"
     )
-    messages = [
-        {
-            "role": "system",
-            "content": "你是资深开发者，擅长把英文开源项目讲成中国人一眼就懂的中文介绍。",
-        },
-        {"role": "user", "content": prompt},
-    ]
+    payload = {
+        "model": model,
+        "messages": [
+            {
+                "role": "system",
+                "content": "你是资深开发者，擅长把英文开源项目讲成中国人一眼就懂的中文。只输出要求的两行。",
+            },
+            {"role": "user", "content": prompt},
+        ],
+        "temperature": 0.5,
+        "max_tokens": 300,
+    }
 
-    def call(use_json_mode):
-        payload = {
-            "model": model,
-            "messages": messages,
-            "temperature": 0.5,
-            "max_tokens": 300,
-        }
-        if use_json_mode:
-            payload["response_format"] = {"type": "json_object"}
+    try:
         data = http_post_json(
             endpoint,
             payload,
@@ -336,29 +353,19 @@ def llm_enrich(repo, cfg):
                 "X-GitHub-Api-Version": "2022-11-28",
             },
         )
-        return data["choices"][0]["message"]["content"]
-
-    try:
-        try:
-            content = call(True)
-        except Exception as e:  # noqa: BLE001
-            log(f"JSON 模式失败，改用普通模式重试: {e}")
-            content = call(False)
-        obj = _parse_json_lenient(content) or {}
-        result = {}
-        if obj.get("summary"):
-            result["summary"] = str(obj["summary"]).strip()
-        if obj.get("comment"):
-            result["comment"] = str(obj["comment"]).strip()
-        if not result:
-            # 兜底：整段当简介
-            clean = content.strip().strip('"“”').replace("\n", " ").strip()
-            if clean:
-                result["summary"] = clean
-        return result
+        content = data["choices"][0]["message"]["content"]
     except Exception as e:  # noqa: BLE001
         log(f"中文简介/点评生成失败 {repo['full_name']}: {e}")
         return {}
+
+    summary, comment = _parse_two_lines(content)
+    result = {}
+    if summary:
+        result["summary"] = summary
+    if comment:
+        result["comment"] = comment
+    log(f"点评[{repo['full_name']}] 简介={summary} || 点评={comment}")
+    return result
 
 
 # ---------------------------------------------------------------- 渲染
