@@ -101,7 +101,10 @@ def fetch_trending(since, token):
     result = {}
     blocks = html.split('<article class="Box-row">')[1:]
     for block in blocks:
-        m = re.search(r'<h2 class="h3 lh-condensed">\s*<a href="/([^"/]+)/([^"]+?)"', block)
+        # 注意：<a> 上可能先有 data-hydro-click 等属性，href 不一定紧跟 <a
+        m = re.search(
+            r'<h2 class="h3 lh-condensed">\s*<a[^>]*?href="/([^"/]+)/([^"]+?)"', block
+        )
         if not m:
             continue
         full_name = f"{m.group(1)}/{m.group(2)}".rstrip()
