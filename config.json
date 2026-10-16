@@ -13,6 +13,7 @@
     "model": "",
     "base_url": "",
     "api_key_env": "LLM_API_KEY",
+    "interval": 32,
     "endpoint": "https://models.github.ai/inference/chat/completions"
   },
   "search_queries": [

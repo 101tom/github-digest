@@ -331,6 +331,7 @@ def _resolve_llm(cfg):
             "keyless": True,
             "is_oai": True,
             "model": model or "openai",
+            "timeout": 90,
         }
 
     base_url = (llm.get("base_url") or "").strip()
@@ -342,6 +343,7 @@ def _resolve_llm(cfg):
             "keyless": False,
             "is_oai": True,
             "model": model or "deepseek-chat",
+            "timeout": 60,
         }
 
     return {
@@ -350,6 +352,7 @@ def _resolve_llm(cfg):
         "keyless": False,
         "is_oai": False,
         "model": model or "openai/gpt-4o-mini",
+        "timeout": 60,
     }
 
 
@@ -414,9 +417,17 @@ def _llm_generate(repo, resolved):
         }
     )
     data = http_post_json(
-        resolved["endpoint"], payload, token=resolved["token"] or None, extra_headers=headers
+        resolved["endpoint"],
+        payload,
+        token=resolved["token"] or None,
+        extra_headers=headers,
+        retries=1,
+        timeout=resolved.get("timeout", 60),
     )
-    content = data["choices"][0]["message"]["content"]
+    try:
+        content = data["choices"][0]["message"]["content"]
+    except (KeyError, IndexError, TypeError) as e:
+        raise RuntimeError(f"响应结构异常（前 200 字符）: {str(data)[:200]!r}") from e
     summary, comment = _parse_two_lines(content)
     result = {}
     if summary:
@@ -584,9 +595,11 @@ def main():
 
     # 3.5) 生成中文简介 + 点评（可选）
     if (cfg.get("llm") or {}).get("enabled"):
-        for r in picked:
+        interval = float((cfg.get("llm") or {}).get("interval", 1) or 0)
+        for idx, r in enumerate(picked):
+            if idx > 0 and interval > 0:
+                time.sleep(interval)  # 规避服务端限速
             r.update(llm_enrich(r, cfg))
-            time.sleep(1)
 
     # 4) 渲染 + 投递
     day = now_cst.strftime("%Y-%m-%d")

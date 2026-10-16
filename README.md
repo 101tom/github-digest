@@ -76,27 +76,31 @@ git push -u origin main
 | `llm.enabled` | 是否生成「一句话中文点评」 |
 | `llm.model` | 点评用的模型，默认 `openai/gpt-4o-mini` |
 
-## 中文简介 + 一句话点评（可选）
+## 中文简介 + 一句话点评
 
-开启后（`config.json` 里 `llm.enabled = true`），每个项目会直接附上 **🇨🇳 中文简介**（它是什么、解决什么问题）和 **💡 点评**（亮点、适合谁用），无需点开链接就能看懂。若模型不可用则自动回退到英文官方简介。
+开启后（`config.json` 里 `llm.enabled = true`），每个项目会直接附上 **🇨🇳 中文简介**（它是什么、解决什么问题）和 **💡 点评**（亮点、适合谁用），不用点开链接就能看懂。
 
-默认走 **DeepSeek**（OpenAI 兼容接口，中文好、便宜）。需要：
+### 三种供给源（按 `config.json` 优先级）
 
-1. 去 https://platform.deepseek.com/ 注册 → 创建 API Key
-2. 在仓库 **Secrets** 里新增 `LLM_API_KEY`，填入该 Key
+1. **Pollinations（默认，免密钥免注册）**
+   ```json
+   "llm": { "enabled": true, "provider": "pollinations", "interval": 32 }
+   ```
+   免费但有硬限制：**每 IP 每 30 秒 1 次**、单次响应 30~80 秒，所以整轮约 5 分钟。`interval` 就是用于规避限速的等待秒数。
 
-想换别家（OpenAI / 硅基流动 / Moonshot / 通义 等）只改 `config.json`：
+2. **任意 OpenAI 兼容接口（推荐，速度与质量最好）**
+   ```json
+   "llm": { "enabled": true, "base_url": "https://api.deepseek.com/v1", "model": "deepseek-chat" }
+   ```
+   然后在仓库 Secrets 里加 `LLM_API_KEY` 即可。DeepSeek / OpenAI / 硅基流动 / Moonshot / 通义 都能这样接。
 
-```json
-"llm": {
-  "enabled": true,
-  "base_url": "https://api.openai.com/v1",   // 或任何 OpenAI 兼容 base_url
-  "model": "gpt-4o-mini",
-  "api_key_env": "LLM_API_KEY"
-}
-```
+3. **GitHub Models（用自带的 GITHUB_TOKEN，无需密钥）**
+   把 `provider` 和 `base_url` 都留空即可。注意：该接口在部分网络环境下不可用。
 
-> 进阶：若把 `base_url` 留空，会回退到用 `GITHUB_TOKEN` 调 GitHub Models（`models: read` 权限已配好），无需额外密钥——但该接口在部分环境下不可用。
+### 兜底
+
+无论哪种供给源失败，都会**自动回退到免费机器翻译**（Google→MyMemory），仍保证是中文，只是没有"点评"那行。
+
 
 
 ## 本地演练（不推送、不改状态）
