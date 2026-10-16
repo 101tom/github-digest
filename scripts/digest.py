@@ -313,20 +313,44 @@ def _parse_two_lines(text):
 
 
 def _resolve_llm(cfg):
-    """解析 (endpoint, token, is_openai_compatible)。
+    """解析 LLM 调用参数。
 
-    - 配了 llm.base_url → 走任意 OpenAI 兼容接口（推荐，如 DeepSeek）。
-    - 否则回退到 GitHub Models（用 GITHUB_TOKEN）。
+    优先级：
+      1. llm.provider == "pollinations" → 免费免密钥大模型
+      2. llm.base_url 有值            → 任意 OpenAI 兼容接口（如 DeepSeek，需密钥）
+      3. 否则                         → GitHub Models（用 GITHUB_TOKEN）
     """
     llm = cfg.get("llm") or {}
+    provider = (llm.get("provider") or "").strip().lower()
+    model = (llm.get("model") or "").strip()
+
+    if provider == "pollinations":
+        return {
+            "endpoint": "https://text.pollinations.ai/openai",
+            "token": "",
+            "keyless": True,
+            "is_oai": True,
+            "model": model or "openai",
+        }
+
     base_url = (llm.get("base_url") or "").strip()
     if base_url:
         key_env = llm.get("api_key_env") or "LLM_API_KEY"
-        token = os.environ.get(key_env, "").strip()
-        return base_url.rstrip("/") + "/chat/completions", token, True
-    token = (os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN") or "").strip()
-    endpoint = llm.get("endpoint", "https://models.github.ai/inference/chat/completions")
-    return endpoint, token, False
+        return {
+            "endpoint": base_url.rstrip("/") + "/chat/completions",
+            "token": os.environ.get(key_env, "").strip(),
+            "keyless": False,
+            "is_oai": True,
+            "model": model or "deepseek-chat",
+        }
+
+    return {
+        "endpoint": llm.get("endpoint", "https://models.github.ai/inference/chat/completions"),
+        "token": (os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN") or "").strip(),
+        "keyless": False,
+        "is_oai": False,
+        "model": model or "openai/gpt-4o-mini",
+    }
 
 
 def translate_zh(text):
@@ -359,7 +383,7 @@ def translate_zh(text):
     return ""
 
 
-def _llm_generate(repo, cfg, endpoint, token, is_oai, model):
+def _llm_generate(repo, resolved):
     prompt = (
         f"开源项目：{repo['full_name']}\n"
         f"官方简介：{repo['desc']}\n"
@@ -370,7 +394,7 @@ def _llm_generate(repo, cfg, endpoint, token, is_oai, model):
         "点评：<一句中文，不超过 35 字，说清亮点和适合谁用，像向朋友安利>\n"
     )
     payload = {
-        "model": model,
+        "model": resolved["model"],
         "messages": [
             {
                 "role": "system",
@@ -383,13 +407,15 @@ def _llm_generate(repo, cfg, endpoint, token, is_oai, model):
     }
     headers = (
         {"Accept": "application/json"}
-        if is_oai
+        if resolved["is_oai"]
         else {
             "Accept": "application/vnd.github+json",
             "X-GitHub-Api-Version": "2022-11-28",
         }
     )
-    data = http_post_json(endpoint, payload, token=token, extra_headers=headers)
+    data = http_post_json(
+        resolved["endpoint"], payload, token=resolved["token"] or None, extra_headers=headers
+    )
     content = data["choices"][0]["message"]["content"]
     summary, comment = _parse_two_lines(content)
     result = {}
@@ -406,11 +432,10 @@ def llm_enrich(repo, cfg):
     if not llm.get("enabled"):
         return {}
 
-    endpoint, token, is_oai = _resolve_llm(cfg)
-    if token:
-        model = llm.get("model") or ("deepseek-chat" if is_oai else "openai/gpt-4o-mini")
+    resolved = _resolve_llm(cfg)
+    if resolved["token"] or resolved["keyless"]:
         try:
-            result = _llm_generate(repo, cfg, endpoint, token, is_oai, model)
+            result = _llm_generate(repo, resolved)
             if result:
                 log(
                     f"点评[{repo['full_name']}] 简介={result.get('summary', '')} "
