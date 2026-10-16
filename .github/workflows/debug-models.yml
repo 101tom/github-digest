@@ -10,32 +10,21 @@ jobs:
   probe:
     runs-on: ubuntu-latest
     steps:
-      - name: 探测 GitHub Models 接口
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: 探测外网连通性
         run: |
-          echo "===== 1) 目录接口 catalog/models ====="
-          curl -sS -D - -o /tmp/cat.json \
-            -H "Accept: application/vnd.github+json" \
-            -H "Authorization: Bearer $GITHUB_TOKEN" \
-            "https://models.github.ai/catalog/models"
-          echo "---- catalog body 前 800 字节 ----"
-          head -c 800 /tmp/cat.json
-          echo
-          echo
-
-          echo "===== 2) 推理接口 chat/completions（gpt-4o-mini）====="
-          curl -sS -D /tmp/h1.txt -o /tmp/b1.txt \
-            -X POST "https://models.github.ai/inference/chat/completions" \
-            -H "Accept: application/vnd.github+json" \
-            -H "Authorization: Bearer $GITHUB_TOKEN" \
-            -H "Content-Type: application/json" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-            -d '{"model":"openai/gpt-4o-mini","messages":[{"role":"user","content":"用一句中文打个招呼"}]}'
-          echo "---- 响应头 ----"
-          cat /tmp/h1.txt
-          echo "---- 响应体字节数 ----"
-          wc -c /tmp/b1.txt
-          echo "---- 响应体 ----"
-          cat /tmp/b1.txt
-          echo
+          probe() {
+            echo "======== $1 ========"
+            code=$(curl -sS -o /tmp/o.txt -w "%{http_code}" -m 20 "$1" 2>/tmp/err.txt) || true
+            echo "http_code=$code  bytes=$(wc -c </tmp/o.txt 2>/dev/null || echo 0)"
+            head -c 200 /tmp/o.txt 2>/dev/null
+            echo
+            if [ -s /tmp/err.txt ]; then echo "stderr: $(head -c 200 /tmp/err.txt)"; fi
+            echo
+          }
+          probe https://example.com
+          probe https://api.github.com/zen
+          probe https://raw.githubusercontent.com/github/gitignore/main/Python.gitignore
+          probe https://api.openai.com/v1/models
+          probe https://api.deepseek.com/v1/models
+          probe https://models.github.ai/catalog/models
+          probe https://www.google.com
