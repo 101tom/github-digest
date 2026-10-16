@@ -1,0 +1,16 @@
+{
+  "top_n": 5,
+  "language": "",
+  "min_stars": 100,
+  "trending_since": "daily",
+  "include_topics": [],
+  "exclude_topics": ["awesome", "awesome-list", "interview", "roadmap", "resources", "list", "collection"],
+  "exclude_repos": [],
+  "resend_cooldown_days": 90,
+  "search_queries": [
+    "created:>{d7} stars:>200",
+    "created:>{d30} stars:>800",
+    "pushed:>{d2} stars:>3000"
+  ],
+  "queries_note": "占位符 {d7}/{d30}/{d2} 分别表示最近 7 天 / 30 天 / 2 天"
+}

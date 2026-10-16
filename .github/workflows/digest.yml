@@ -1,0 +1,50 @@
+name: github-digest
+
+# 定时推送（注意：cron 用 UTC，北京时间 = UTC + 8）
+#   07:30 早餐  ->  23:30 UTC(前一天)
+#   12:00 午餐  ->  04:00 UTC
+#   18:30 晚餐  ->  10:30 UTC
+on:
+  schedule:
+    - cron: "30 23 * * *"
+    - cron: "0 4 * * *"
+    - cron: "30 10 * * *"
+  workflow_dispatch: {}   # 手动触发，方便测试
+
+permissions:
+  contents: write          # 需要回写 state/sent.json
+
+concurrency:
+  group: github-digest
+  cancel-in-progress: false
+
+jobs:
+  digest:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出仓库
+        uses: actions/checkout@v4
+
+      - name: 准备 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: 运行精选并推送
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SERVERCHAN_SENDKEY: ${{ secrets.SERVERCHAN_SENDKEY }}
+          PUSHPLUS_TOKEN: ${{ secrets.PUSHPLUS_TOKEN }}
+        run: python scripts/digest.py
+
+      - name: 回写去重状态
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add state/sent.json
+          if git diff --cached --quiet; then
+            echo "状态无变化，跳过提交"
+          else
+            git commit -m "chore: update digest state [skip ci]"
+            git push
+          fi
