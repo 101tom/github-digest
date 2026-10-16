@@ -329,18 +329,37 @@ def _resolve_llm(cfg):
     return endpoint, token, False
 
 
-def llm_enrich(repo, cfg):
-    """生成 {summary, comment}：中文简介 + 一句点评。失败返回 {}，静默降级。"""
-    llm = cfg.get("llm") or {}
-    if not llm.get("enabled"):
-        return {}
+def translate_zh(text):
+    """免费把英文翻译成中文（无需密钥）。依次尝试多个接口，全失败返回 ""。"""
+    text = (text or "").strip()
+    if not text:
+        return ""
+    # 1) Google 非官方接口
+    try:
+        data = http_get(
+            "https://translate.googleapis.com/translate_a/single",
+            {"client": "gtx", "sl": "auto", "tl": "zh-CN", "dt": "t", "q": text[:1200]},
+        )
+        out = "".join(seg[0] for seg in data[0] if seg and seg[0]).strip()
+        if out:
+            return out
+    except Exception as e:  # noqa: BLE001
+        log(f"gtx 翻译失败: {e}")
+    # 2) MyMemory
+    try:
+        data = http_get(
+            "https://api.mymemory.translated.net/get",
+            {"q": text[:500], "langpair": "en|zh-CN"},
+        )
+        out = (data.get("responseData") or {}).get("translatedText", "").strip()
+        if out and "MYMEMORY WARNING" not in out.upper():
+            return out
+    except Exception as e:  # noqa: BLE001
+        log(f"mymemory 翻译失败: {e}")
+    return ""
 
-    endpoint, token, is_oai = _resolve_llm(cfg)
-    if not token:
-        log("未配置可用的 LLM 密钥，跳过中文简介/点评")
-        return {}
 
-    model = llm.get("model") or ("deepseek-chat" if is_oai else "openai/gpt-4o-mini")
+def _llm_generate(repo, cfg, endpoint, token, is_oai, model):
     prompt = (
         f"开源项目：{repo['full_name']}\n"
         f"官方简介：{repo['desc']}\n"
@@ -370,22 +389,45 @@ def llm_enrich(repo, cfg):
             "X-GitHub-Api-Version": "2022-11-28",
         }
     )
-
-    try:
-        data = http_post_json(endpoint, payload, token=token, extra_headers=headers)
-        content = data["choices"][0]["message"]["content"]
-    except Exception as e:  # noqa: BLE001
-        log(f"中文简介/点评生成失败 {repo['full_name']}: {e}")
-        return {}
-
+    data = http_post_json(endpoint, payload, token=token, extra_headers=headers)
+    content = data["choices"][0]["message"]["content"]
     summary, comment = _parse_two_lines(content)
     result = {}
     if summary:
         result["summary"] = summary
     if comment:
         result["comment"] = comment
-    log(f"点评[{repo['full_name']}] 简介={summary} || 点评={comment}")
     return result
+
+
+def llm_enrich(repo, cfg):
+    """生成 {summary, comment}。有 LLM 密钥走模型；否则/失败时回退到免费翻译。"""
+    llm = cfg.get("llm") or {}
+    if not llm.get("enabled"):
+        return {}
+
+    endpoint, token, is_oai = _resolve_llm(cfg)
+    if token:
+        model = llm.get("model") or ("deepseek-chat" if is_oai else "openai/gpt-4o-mini")
+        try:
+            result = _llm_generate(repo, cfg, endpoint, token, is_oai, model)
+            if result:
+                log(
+                    f"点评[{repo['full_name']}] 简介={result.get('summary', '')} "
+                    f"|| 点评={result.get('comment', '')}"
+                )
+                return result
+            log("模型返回为空，回退到免费翻译")
+        except Exception as e:  # noqa: BLE001
+            log(f"模型调用失败 {repo['full_name']}: {e}；回退到免费翻译")
+    else:
+        log("未配置 LLM 密钥，使用免费翻译")
+
+    zh = translate_zh(repo["desc"])
+    if zh:
+        log(f"翻译[{repo['full_name']}] {zh}")
+        return {"summary": zh}
+    return {}
 
 
 # ---------------------------------------------------------------- 渲染

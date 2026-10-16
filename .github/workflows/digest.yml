@@ -9,7 +9,12 @@ on:
     - cron: "30 23 * * *"
     - cron: "0 4 * * *"
     - cron: "30 10 * * *"
-  workflow_dispatch: {}   # 手动触发，方便测试
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "只演练不推送（结果打到日志）"
+        type: boolean
+        default: false
 
 permissions:
   contents: write          # 需要回写 state/sent.json
@@ -37,6 +42,7 @@ jobs:
           SERVERCHAN_SENDKEY: ${{ secrets.SERVERCHAN_SENDKEY }}
           PUSHPLUS_TOKEN: ${{ secrets.PUSHPLUS_TOKEN }}
           LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
+          DRY_RUN: ${{ inputs.dry_run && '1' || '' }}
         run: python scripts/digest.py
 
       - name: 回写去重状态
