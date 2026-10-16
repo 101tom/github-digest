@@ -13,6 +13,7 @@ on:
 
 permissions:
   contents: write          # 需要回写 state/sent.json
+  models: read             # 调用 GitHub Models 生成一句话点评
 
 concurrency:
   group: github-digest

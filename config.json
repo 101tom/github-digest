@@ -7,6 +7,11 @@
   "exclude_topics": ["awesome", "awesome-list", "interview", "roadmap", "resources", "list", "collection"],
   "exclude_repos": [],
   "resend_cooldown_days": 90,
+  "llm": {
+    "enabled": true,
+    "model": "openai/gpt-4o-mini",
+    "endpoint": "https://models.github.ai/inference/chat/completions"
+  },
   "search_queries": [
     "created:>{d7} stars:>200",
     "created:>{d30} stars:>800",

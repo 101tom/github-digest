@@ -73,6 +73,18 @@ git push -u origin main
 | `exclude_repos` | 永久拉黑某些仓库，如 `["torvalds/linux"]` |
 | `resend_cooldown_days` | 同一仓库多久内不重复推 |
 | `search_queries` | 搜索语句，`{d7}`/`{d30}`/`{d2}` 会自动替换成日期 |
+| `llm.enabled` | 是否生成「一句话中文点评」 |
+| `llm.model` | 点评用的模型，默认 `openai/gpt-4o-mini` |
+
+## 一句话点评（可选）
+
+开启后（`config.json` 里 `llm.enabled = true`），每个项目会多一行 **💡 点评**，用一句中文说清"它是什么、能用来做什么、值不值得看"。
+
+- 走 **GitHub Models**，用 Actions 自带的 `GITHUB_TOKEN` 调用，**无需额外密钥**。
+- 需要 workflow 里的 `models: read` 权限（已配好）。
+- 若调用失败（如额度受限），会自动跳过点评、照常推送，不影响主流程。
+- 想用自己的模型？设置仓库 Secret `LLM_API_KEY`，并改 `llm.endpoint` / `llm.model` 为任意 OpenAI 兼容接口即可（此时 `LLM_API_KEY` 优先）。
+
 
 ## 本地演练（不推送、不改状态）
 

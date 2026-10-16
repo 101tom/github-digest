@@ -88,6 +88,40 @@ def http_get(url, params=None, token=None, accept=None, raw=False, retries=3):
     raise last_err
 
 
+def http_post_json(url, payload, token=None, extra_headers=None, retries=2, timeout=60):
+    body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+    headers = {"User-Agent": UA, "Content-Type": "application/json"}
+    if token:
+        headers["Authorization"] = "Bearer " + token
+    if extra_headers:
+        headers.update(extra_headers)
+    last_err = None
+    for attempt in range(retries):
+        try:
+            req = urllib.request.Request(url, data=body, headers=headers, method="POST")
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                return json.loads(resp.read().decode("utf-8", "replace"))
+        except urllib.error.HTTPError as e:
+            last_err = e
+            detail = ""
+            try:
+                detail = e.read().decode("utf-8", "replace")[:300]
+            except Exception:  # noqa: BLE001
+                pass
+            log(f"POST {url} HTTP {e.code}: {detail}")
+            if e.code in (429, 500, 502, 503) and attempt < retries - 1:
+                time.sleep(4 * (attempt + 1))
+                continue
+            raise
+        except Exception as e:  # noqa: BLE001
+            last_err = e
+            if attempt < retries - 1:
+                time.sleep(3 * (attempt + 1))
+                continue
+            raise
+    raise last_err
+
+
 # ---------------------------------------------------------------- 采集
 
 def fetch_trending(since, token):
@@ -225,6 +259,61 @@ def pick(repos_by_name, trending_map, cfg, sent, today):
     return [r for _, r in scored[: cfg.get("top_n", 5)]]
 
 
+# ---------------------------------------------------------------- 一句话点评
+
+def llm_comment(repo, cfg):
+    """调用 GitHub Models 生成一句中文点评；任何失败都静默降级为空。"""
+    llm = cfg.get("llm") or {}
+    if not llm.get("enabled"):
+        return ""
+    token = (
+        os.environ.get("LLM_API_KEY")
+        or os.environ.get("GITHUB_TOKEN")
+        or os.environ.get("GH_TOKEN")
+    )
+    if not token:
+        log("未找到可用于点评的令牌，跳过")
+        return ""
+
+    endpoint = llm.get("endpoint", "https://models.github.ai/inference/chat/completions")
+    model = llm.get("model", "openai/gpt-4o-mini")
+    prompt = (
+        f"开源项目：{repo['full_name']}\n"
+        f"官方简介：{repo['desc']}\n"
+        f"主要语言：{repo['lang'] or '未知'}；星标数：{repo['stars']}\n"
+        f"标签：{', '.join(repo['topics'][:8]) or '无'}\n\n"
+        "请用一句中文（不超过 45 字）点评它的核心价值与典型用途，"
+        "口吻像向朋友安利，直接输出句子本身，不要引号、不要任何前缀。"
+    )
+    payload = {
+        "model": model,
+        "messages": [
+            {
+                "role": "system",
+                "content": "你是资深开发者，擅长用一句话讲清一个开源项目值不值得关注、能用来做什么。",
+            },
+            {"role": "user", "content": prompt},
+        ],
+        "temperature": 0.7,
+        "max_tokens": 120,
+    }
+    try:
+        data = http_post_json(
+            endpoint,
+            payload,
+            token=token,
+            extra_headers={
+                "Accept": "application/vnd.github+json",
+                "X-GitHub-Api-Version": "2022-11-28",
+            },
+        )
+        content = data["choices"][0]["message"]["content"]
+        return content.strip().strip('"“”').replace("\n", " ").strip()
+    except Exception as e:  # noqa: BLE001
+        log(f"点评生成失败 {repo['full_name']}: {e}")
+        return ""
+
+
 # ---------------------------------------------------------------- 渲染
 
 def humanize(num):
@@ -247,6 +336,8 @@ def render(repos, now_cst):
         lines.append(f"**{i}. [{r['full_name']}]({r['url']})**")
         lines.append(meta)
         lines.append(f"> {r['desc']}")
+        if r.get("comment"):
+            lines.append(f"💡 {r['comment']}")
         if r["topics"]:
             lines.append("`" + "` `".join(r["topics"][:5]) + "`")
         lines.append("")
@@ -346,6 +437,14 @@ def main():
     if not picked:
         log("没有可推送的新项目，跳过本次投递")
         return
+
+    # 3.5) 生成一句话点评（可选）
+    if (cfg.get("llm") or {}).get("enabled"):
+        for r in picked:
+            comment = llm_comment(r, cfg)
+            if comment:
+                r["comment"] = comment
+            time.sleep(1)
 
     # 4) 渲染 + 投递
     day = now_cst.strftime("%Y-%m-%d")
