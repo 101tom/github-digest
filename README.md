@@ -76,9 +76,9 @@ git push -u origin main
 | `llm.enabled` | 是否生成「一句话中文点评」 |
 | `llm.model` | 点评用的模型，默认 `openai/gpt-4o-mini` |
 
-## 一句话点评（可选）
+## 中文简介 + 一句话点评（可选）
 
-开启后（`config.json` 里 `llm.enabled = true`），每个项目会多一行 **💡 点评**，用一句中文说清"它是什么、能用来做什么、值不值得看"。
+开启后（`config.json` 里 `llm.enabled = true`），每个项目会直接附上 **🇨🇳 中文简介**（它是什么、解决什么问题）和 **💡 点评**（亮点、适合谁用），无需点开链接就能看懂。若模型不可用则自动回退到英文官方简介。
 
 - 走 **GitHub Models**，用 Actions 自带的 `GITHUB_TOKEN` 调用，**无需额外密钥**。
 - 需要 workflow 里的 `models: read` 权限（已配好）。

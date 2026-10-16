@@ -259,13 +259,35 @@ def pick(repos_by_name, trending_map, cfg, sent, today):
     return [r for _, r in scored[: cfg.get("top_n", 5)]]
 
 
-# ---------------------------------------------------------------- 一句话点评
+# ---------------------------------------------------------------- 中文简介 + 点评
 
-def llm_comment(repo, cfg):
-    """调用 GitHub Models 生成一句中文点评；任何失败都静默降级为空。"""
+def _parse_json_lenient(text):
+    """尽量从模型输出里拿到 JSON 对象。"""
+    text = text.strip()
+    if text.startswith("```"):
+        text = re.sub(r"^```[a-zA-Z]*\s*|\s*```$", "", text).strip()
+    try:
+        obj = json.loads(text)
+        if isinstance(obj, dict):
+            return obj
+    except json.JSONDecodeError:
+        pass
+    m = re.search(r"\{.*\}", text, re.S)
+    if m:
+        try:
+            obj = json.loads(m.group(0))
+            if isinstance(obj, dict):
+                return obj
+        except json.JSONDecodeError:
+            pass
+    return None
+
+
+def llm_enrich(repo, cfg):
+    """生成 {summary, comment}：中文简介 + 一句点评。失败返回 {}，静默降级。"""
     llm = cfg.get("llm") or {}
     if not llm.get("enabled"):
-        return ""
+        return {}
     token = (
         os.environ.get("LLM_API_KEY")
         or os.environ.get("GITHUB_TOKEN")
@@ -273,7 +295,7 @@ def llm_comment(repo, cfg):
     )
     if not token:
         log("未找到可用于点评的令牌，跳过")
-        return ""
+        return {}
 
     endpoint = llm.get("endpoint", "https://models.github.ai/inference/chat/completions")
     model = llm.get("model", "openai/gpt-4o-mini")
@@ -282,22 +304,29 @@ def llm_comment(repo, cfg):
         f"官方简介：{repo['desc']}\n"
         f"主要语言：{repo['lang'] or '未知'}；星标数：{repo['stars']}\n"
         f"标签：{', '.join(repo['topics'][:8]) or '无'}\n\n"
-        "请用一句中文（不超过 45 字）点评它的核心价值与典型用途，"
-        "口吻像向朋友安利，直接输出句子本身，不要引号、不要任何前缀。"
+        "请只输出一个 JSON 对象，不要任何多余文字，格式为：\n"
+        '{"summary": "…", "comment": "…"}\n'
+        "summary：用一句中文（不超过 50 字）说明这个项目是什么、主要解决什么问题，"
+        "让没听过的人也知道它干嘛用；专有名词可保留英文。\n"
+        "comment：用一句中文（不超过 35 字）点评它的亮点、适合什么人用，像向朋友安利。"
     )
-    payload = {
-        "model": model,
-        "messages": [
-            {
-                "role": "system",
-                "content": "你是资深开发者，擅长用一句话讲清一个开源项目值不值得关注、能用来做什么。",
-            },
-            {"role": "user", "content": prompt},
-        ],
-        "temperature": 0.7,
-        "max_tokens": 120,
-    }
-    try:
+    messages = [
+        {
+            "role": "system",
+            "content": "你是资深开发者，擅长把英文开源项目讲成中国人一眼就懂的中文介绍。",
+        },
+        {"role": "user", "content": prompt},
+    ]
+
+    def call(use_json_mode):
+        payload = {
+            "model": model,
+            "messages": messages,
+            "temperature": 0.5,
+            "max_tokens": 300,
+        }
+        if use_json_mode:
+            payload["response_format"] = {"type": "json_object"}
         data = http_post_json(
             endpoint,
             payload,
@@ -307,11 +336,29 @@ def llm_comment(repo, cfg):
                 "X-GitHub-Api-Version": "2022-11-28",
             },
         )
-        content = data["choices"][0]["message"]["content"]
-        return content.strip().strip('"“”').replace("\n", " ").strip()
+        return data["choices"][0]["message"]["content"]
+
+    try:
+        try:
+            content = call(True)
+        except Exception as e:  # noqa: BLE001
+            log(f"JSON 模式失败，改用普通模式重试: {e}")
+            content = call(False)
+        obj = _parse_json_lenient(content) or {}
+        result = {}
+        if obj.get("summary"):
+            result["summary"] = str(obj["summary"]).strip()
+        if obj.get("comment"):
+            result["comment"] = str(obj["comment"]).strip()
+        if not result:
+            # 兜底：整段当简介
+            clean = content.strip().strip('"“”').replace("\n", " ").strip()
+            if clean:
+                result["summary"] = clean
+        return result
     except Exception as e:  # noqa: BLE001
-        log(f"点评生成失败 {repo['full_name']}: {e}")
-        return ""
+        log(f"中文简介/点评生成失败 {repo['full_name']}: {e}")
+        return {}
 
 
 # ---------------------------------------------------------------- 渲染
@@ -335,11 +382,14 @@ def render(repos, now_cst):
         meta += f" · {age_txt}创建"
         lines.append(f"**{i}. [{r['full_name']}]({r['url']})**")
         lines.append(meta)
-        lines.append(f"> {r['desc']}")
+        if r.get("summary"):
+            lines.append(f"🇨🇳 {r['summary']}")
+        else:
+            lines.append(f"> {r['desc']}")
         if r.get("comment"):
             lines.append(f"💡 {r['comment']}")
         if r["topics"]:
-            lines.append("`" + "` `".join(r["topics"][:5]) + "`")
+            lines.append("`" + "` `".join(r["topics"][:3]) + "`")
         lines.append("")
     lines.append("---")
     lines.append("_由 github-digest 自动生成，帮你发现值得关注的开源项目。_")
@@ -438,12 +488,10 @@ def main():
         log("没有可推送的新项目，跳过本次投递")
         return
 
-    # 3.5) 生成一句话点评（可选）
+    # 3.5) 生成中文简介 + 点评（可选）
     if (cfg.get("llm") or {}).get("enabled"):
         for r in picked:
-            comment = llm_comment(r, cfg)
-            if comment:
-                r["comment"] = comment
+            r.update(llm_enrich(r, cfg))
             time.sleep(1)
 
     # 4) 渲染 + 投递
