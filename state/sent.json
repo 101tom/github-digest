@@ -17,6 +17,9 @@
     "cursor/plugins": "2026-10-16",
     "debpalash/VoiceStudio": "2026-10-16",
     "deepseek-ai/deepseek-harness": "2026-10-16",
+    "farion1231/cc-switch": "2026-10-17",
+    "garrytan/gstack": "2026-10-17",
+    "github/spec-kit": "2026-10-17",
     "hmjz100/LinkSwift": "2026-10-16",
     "mksglu/context-mode": "2026-10-16",
     "morluto/rea": "2026-10-16",
@@ -25,10 +28,12 @@
     "openclaw/openclaw": "2026-10-16",
     "ruvnet/ruflo": "2026-10-16",
     "storytold/filmcraft": "2026-10-16",
+    "storytold/lightcraft": "2026-10-17",
     "storytold/pdfcraft": "2026-10-16",
     "storytold/photocraft": "2026-10-16",
     "storytold/wordcraft": "2026-10-16",
     "wheresryan22/anatomy": "2026-10-16",
-    "xerj-org/xerj": "2026-10-16"
+    "xerj-org/xerj": "2026-10-16",
+    "yetone/magpie": "2026-10-17"
   }
 }
