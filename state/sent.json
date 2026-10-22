@@ -1,5 +1,6 @@
 {
   "sent": {
+    "9bie/php2shell-bypass-aslr-exp": "2026-10-22",
     "ARahim3/DigUp": "2026-10-18",
     "Arekejoker/qwen21-nsfw-pose-skill": "2026-10-19",
     "Comfy-Org/ComfyUI": "2026-10-18",
@@ -21,6 +22,7 @@
     "LibreSpark/LibreTV": "2026-10-16",
     "Louis-CFM/coucou": "2026-10-20",
     "MadsLorentzen/ai-job-search": "2026-10-16",
+    "Meloong-Git/PCL": "2026-10-22",
     "NandhaKishorM/laya": "2026-10-16",
     "NationalSecurityAgency/ghidra": "2026-10-16",
     "Niko1221/Strata": "2026-10-16",
@@ -45,6 +47,7 @@
     "deepseek-ai/deepseek-harness": "2026-10-16",
     "eagle-hq/EAGLE-4": "2026-10-22",
     "farion1231/cc-switch": "2026-10-17",
+    "fastapi/fastapi": "2026-10-22",
     "feder-cr/git-ai": "2026-10-19",
     "firecrawl/firecrawl": "2026-10-17",
     "flutter/flutter": "2026-10-22",
@@ -61,6 +64,7 @@
     "langchain-ai/langchain": "2026-10-18",
     "langflow-ai/langflow": "2026-10-18",
     "langgenius/dify": "2026-10-18",
+    "luongnv89/claude-howto": "2026-10-22",
     "mattpocock/skills": "2026-10-20",
     "microsoft/PowerToys": "2026-10-22",
     "microsoft/markitdown": "2026-10-21",
@@ -77,6 +81,7 @@
     "openai/codex": "2026-10-19",
     "openclaw/openclaw": "2026-10-16",
     "pengchujin/aerial-tv": "2026-10-21",
+    "php/php-src": "2026-10-22",
     "practical-tutorials/project-based-learning": "2026-10-19",
     "react/react": "2026-10-20",
     "rehan-remade/universal-modder": "2026-10-18",
