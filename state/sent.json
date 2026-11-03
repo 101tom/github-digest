@@ -32,6 +32,7 @@
     "Gathin23/cleanyourtv": "2026-10-20",
     "Gathin23/tv-vibehack": "2026-10-19",
     "Genymobile/scrcpy": "2026-10-23",
+    "Gezine/CivSwitch": "2026-11-03",
     "Graphify-Labs/graphify": "2026-10-20",
     "HKUDS/CLI-Anything": "2026-10-16",
     "HKUDS/DeepTutor": "2026-10-27",
@@ -54,6 +55,7 @@
     "MadsLorentzen/ai-job-search": "2026-10-16",
     "Meloong-Git/PCL": "2026-10-22",
     "Motionsites-AI/claude-skill": "2026-10-28",
+    "N1nEmAn/sapper-v2": "2026-11-03",
     "NVIDIA/OpenShell": "2026-10-23",
     "NVIDIA/SkillSpector": "2026-10-27",
     "NandhaKishorM/laya": "2026-10-16",
@@ -76,6 +78,7 @@
     "T-Auto/dsh-ops": "2026-10-23",
     "THU-MAIC/OpenMAIC": "2026-10-31",
     "TauricResearch/TradingAgents": "2026-10-25",
+    "Usagi-org/ai-goofish-monitor": "2026-11-03",
     "Verlintas/NOIR": "2026-11-03",
     "YuJunZhiXue/dsh-purge": "2026-10-19",
     "Zagitta/gpu-unlock": "2026-10-25",
@@ -130,6 +133,7 @@
     "fastapi/fastapi": "2026-10-22",
     "feder-cr/git-ai": "2026-10-19",
     "firecrawl/firecrawl": "2026-10-17",
+    "floci-io/floci": "2026-11-03",
     "flutter/flutter": "2026-10-22",
     "freeCodeCamp/freeCodeCamp": "2026-10-17",
     "garrytan/gstack": "2026-10-17",
@@ -288,6 +292,7 @@
     "yt-dlp/yt-dlp": "2026-10-21",
     "ytdl-org/youtube-dl": "2026-10-31",
     "zai-org/ZCode": "2026-10-20",
-    "zhongerxin/iPhone-use": "2026-10-20"
+    "zhongerxin/iPhone-use": "2026-10-20",
+    "zortos293/Eglantine": "2026-11-03"
   }
 }
